@@ -1,5 +1,5 @@
 from ...l2.dna import DNA
-from ...l3.gene_pool import GenePool
+from ...l3.dna_pool import DnaPool
 
 
 class SpawningPool:
@@ -8,7 +8,7 @@ class SpawningPool:
 
     def __init__(self, schemas):
         self._schemas = schemas
-        self._pool = GenePool()
+        self._pool = DnaPool()
 
     @property
     def size(self):
@@ -27,4 +27,4 @@ class SpawningPool:
         return self._pool.contains(dna)
 
     def clear(self):
-        self._pool = GenePool()
+        self._pool = DnaPool()

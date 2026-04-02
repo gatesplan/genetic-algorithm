@@ -1,4 +1,4 @@
-class GenePool:
+class DnaPool:
 
     __slots__ = ('_index', '_items')
 

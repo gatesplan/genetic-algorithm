@@ -1,3 +1,3 @@
-from .population import Population
+from .population import PopulationPool
 
-__all__ = ['Population']
+__all__ = ['PopulationPool']

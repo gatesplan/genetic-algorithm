@@ -2,7 +2,8 @@ import pytest
 from ff_genetic_algorithm.l0.gene_schema import GeneSchema
 from ff_genetic_algorithm.l0.sequence_schema import SequenceSchema
 from ff_genetic_algorithm.l2.dna import DNA
-from ff_genetic_algorithm.l4.population import Population
+from ff_genetic_algorithm.l3.individual import Individual
+from ff_genetic_algorithm.l4.population import PopulationPool
 
 
 SCHEMA = [
@@ -13,122 +14,151 @@ SCHEMA = [
 ]
 
 
-def _make_dna(flag, period):
-    return DNA(SCHEMA, values={"flag": flag, "rsi.period": period})
+class Trader:
+    def __init__(self, dna):
+        self.dna = dna
+        self.scores = {}
 
 
-class TestPopulationAdd:
+def _make(flag=True, period=14, **scores):
+    dna = DNA(SCHEMA, values={"flag": flag, "rsi.period": period})
+    ind = Trader(dna)
+    ind.scores = dict(scores)
+    return ind
+
+
+class TestPopulationPoolAdd:
 
     def test_add(self):
-        pop = Population()
-        dna = _make_dna(True, 14)
-        pop.add(dna)
-        assert pop.size == 1
+        pool = PopulationPool()
+        ind = _make()
+        assert pool.add(ind) is True
+        assert pool.size == 1
 
     def test_add_duplicate_rejected(self):
-        pop = Population()
-        dna1 = _make_dna(True, 14)
-        dna2 = _make_dna(True, 14)
-        assert pop.add(dna1) is True
-        assert pop.add(dna2) is False
-        assert pop.size == 1
+        pool = PopulationPool()
+        ind1 = _make(True, 14)
+        ind2 = _make(True, 14)
+        assert pool.add(ind1) is True
+        assert pool.add(ind2) is False
+        assert pool.size == 1
+
+    def test_add_different(self):
+        pool = PopulationPool()
+        pool.add(_make(True, 14))
+        pool.add(_make(False, 20))
+        assert pool.size == 2
 
 
-class TestPopulationFitness:
+class TestPopulationPoolGet:
 
-    def test_set_and_get_fitness(self):
-        pop = Population()
-        dna = _make_dna(True, 14)
-        pop.add(dna)
-        pop.set_fitness(dna, 0.85)
-        assert pop.get_fitness(dna) == 0.85
+    def test_get_by_dna(self):
+        pool = PopulationPool()
+        ind = _make(True, 14, sharpe=1.5)
+        pool.add(ind)
+        found = pool.get(ind.dna)
+        assert found is ind
 
-    def test_fitness_default_none(self):
-        pop = Population()
-        dna = _make_dna(True, 14)
-        pop.add(dna)
-        assert pop.get_fitness(dna) is None
-
-    def test_set_fitness_multiple(self):
-        pop = Population()
-        dna1 = _make_dna(True, 14)
-        dna2 = _make_dna(False, 20)
-        pop.add(dna1)
-        pop.add(dna2)
-        pop.set_fitness(dna1, 0.9)
-        pop.set_fitness(dna2, 0.3)
-        assert pop.get_fitness(dna1) == 0.9
-        assert pop.get_fitness(dna2) == 0.3
+    def test_get_missing_returns_none(self):
+        pool = PopulationPool()
+        dna = DNA(SCHEMA, values={"flag": True, "rsi.period": 14})
+        assert pool.get(dna) is None
 
 
-class TestPopulationRanking:
+class TestPopulationPoolSortBy:
 
-    def test_ranked_by_fitness_descending(self):
-        pop = Population()
-        dnas = [_make_dna(True, i) for i in range(5, 10)]
-        fitnesses = [0.3, 0.9, 0.1, 0.7, 0.5]
-        for dna, fit in zip(dnas, fitnesses):
-            pop.add(dna)
-            pop.set_fitness(dna, fit)
-        ranked = pop.ranked()
-        scores = [f for _, f in ranked]
-        assert scores == sorted(scores, reverse=True)
+    def test_sort_by_descending(self):
+        pool = PopulationPool()
+        for i, period in enumerate(range(5, 10)):
+            pool.add(_make(True, period, sharpe=float(i)))
+        result = pool.sort_by("sharpe")
+        values = [ind.scores["sharpe"] for ind in result]
+        assert values == [4.0, 3.0, 2.0, 1.0, 0.0]
 
-    def test_ranked_returns_dna_fitness_pairs(self):
-        pop = Population()
-        dna = _make_dna(True, 14)
-        pop.add(dna)
-        pop.set_fitness(dna, 0.5)
-        ranked = pop.ranked()
-        assert len(ranked) == 1
-        assert ranked[0] == (dna, 0.5)
+    def test_sort_by_ascending(self):
+        pool = PopulationPool()
+        for i, period in enumerate(range(5, 10)):
+            pool.add(_make(True, period, mdd=float(-i)))
+        result = pool.sort_by("mdd", reverse=False)
+        values = [ind.scores["mdd"] for ind in result]
+        assert values == [-4.0, -3.0, -2.0, -1.0, 0.0]
 
-    def test_ranked_excludes_none_fitness(self):
-        pop = Population()
-        dna1 = _make_dna(True, 14)
-        dna2 = _make_dna(False, 20)
-        pop.add(dna1)
-        pop.add(dna2)
-        pop.set_fitness(dna1, 0.5)
-        ranked = pop.ranked()
-        assert len(ranked) == 1
+    def test_sort_by_excludes_missing_score(self):
+        pool = PopulationPool()
+        pool.add(_make(True, 14, sharpe=1.0))
+        pool.add(_make(True, 15))  # no sharpe
+        result = pool.sort_by("sharpe")
+        assert len(result) == 1
 
 
-class TestPopulationSelect:
+class TestPopulationPoolFilterBy:
+
+    def test_filter_min(self):
+        pool = PopulationPool()
+        pool.add(_make(True, 10, sharpe=0.5))
+        pool.add(_make(True, 11, sharpe=1.5))
+        pool.add(_make(True, 12, sharpe=2.5))
+        result = pool.filter_by("sharpe", min_val=1.0)
+        assert len(result) == 2
+
+    def test_filter_max(self):
+        pool = PopulationPool()
+        pool.add(_make(True, 10, mdd=-0.5))
+        pool.add(_make(True, 11, mdd=-0.2))
+        pool.add(_make(True, 12, mdd=-0.05))
+        result = pool.filter_by("mdd", max_val=-0.1)
+        assert len(result) == 2
+
+    def test_filter_min_and_max(self):
+        pool = PopulationPool()
+        pool.add(_make(True, 10, sharpe=0.5))
+        pool.add(_make(True, 11, sharpe=1.5))
+        pool.add(_make(True, 12, sharpe=2.5))
+        result = pool.filter_by("sharpe", min_val=1.0, max_val=2.0)
+        assert len(result) == 1
+        assert result[0].scores["sharpe"] == 1.5
+
+    def test_filter_excludes_missing_score(self):
+        pool = PopulationPool()
+        pool.add(_make(True, 10, sharpe=1.0))
+        pool.add(_make(True, 11))  # no sharpe
+        result = pool.filter_by("sharpe", min_val=0.0)
+        assert len(result) == 1
+
+
+class TestPopulationPoolTop:
 
     def test_top_n(self):
-        pop = Population()
-        dnas = [_make_dna(True, i) for i in range(5, 15)]
-        for i, dna in enumerate(dnas):
-            pop.add(dna)
-            pop.set_fitness(dna, float(i))
-        top = pop.top(3)
+        pool = PopulationPool()
+        for i, period in enumerate(range(5, 15)):
+            pool.add(_make(True, period, sharpe=float(i)))
+        top = pool.top(3, "sharpe")
         assert len(top) == 3
-        fitnesses = [pop.get_fitness(d) for d in top]
-        assert fitnesses == [9.0, 8.0, 7.0]
+        values = [ind.scores["sharpe"] for ind in top]
+        assert values == [9.0, 8.0, 7.0]
 
     def test_top_n_exceeds_size(self):
-        pop = Population()
-        dna = _make_dna(True, 14)
-        pop.add(dna)
-        pop.set_fitness(dna, 1.0)
-        top = pop.top(5)
+        pool = PopulationPool()
+        pool.add(_make(True, 14, sharpe=1.0))
+        top = pool.top(5, "sharpe")
         assert len(top) == 1
 
 
-class TestPopulationIterate:
+class TestPopulationPoolIterate:
 
     def test_iter_all(self):
-        pop = Population()
+        pool = PopulationPool()
         for i in range(5, 10):
-            pop.add(_make_dna(True, i))
-        assert len(list(pop)) == 5
+            pool.add(_make(True, i))
+        items = list(pool)
+        assert len(items) == 5
+        assert all(isinstance(ind, Individual) for ind in items)
 
 
-class TestPopulationClear:
+class TestPopulationPoolClear:
 
     def test_clear(self):
-        pop = Population()
-        pop.add(_make_dna(True, 14))
-        pop.clear()
-        assert pop.size == 0
+        pool = PopulationPool()
+        pool.add(_make(True, 14, sharpe=1.0))
+        pool.clear()
+        assert pool.size == 0

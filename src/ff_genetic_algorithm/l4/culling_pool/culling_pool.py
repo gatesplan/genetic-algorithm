@@ -1,4 +1,4 @@
-from ...l3.gene_pool import GenePool
+from ...l3.dna_pool import DnaPool
 
 
 class CullingPool:
@@ -6,7 +6,7 @@ class CullingPool:
     __slots__ = ('_pool',)
 
     def __init__(self):
-        self._pool = GenePool()
+        self._pool = DnaPool()
 
     @property
     def size(self):
