@@ -75,6 +75,8 @@ class Gene:
     def from_bits(self, bit_str):
         s = self.schema
         idx = int(bit_str, 2)
+        max_idx = self._steps() - 1
+        idx = min(idx, max_idx)
 
         if s.type is bool:
             self._value = bool(idx)

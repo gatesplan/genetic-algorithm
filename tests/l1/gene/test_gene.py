@@ -158,6 +158,50 @@ class TestGeneBits:
             assert g2.value == v
 
 
+class TestFromBitsOverflow:
+    """bit representation range > value range -> clamp to valid range"""
+
+    def test_int_overflow_clamped_to_max(self):
+        # range(5, 30) -> 26 steps, 5 bits, max idx = 31
+        s = GeneSchema("period", int, range=(5, 30))
+        g = Gene(s, value=5)
+        g.from_bits("11111")  # idx=31, should clamp to 25 -> value=30
+        assert g.value == 30
+
+    def test_int_overflow_just_above(self):
+        s = GeneSchema("period", int, range=(5, 30))
+        g = Gene(s, value=5)
+        g.from_bits("11010")  # idx=26, just outside -> clamp to 25 -> value=30
+        assert g.value == 30
+
+    def test_choices_overflow_clamped_to_last(self):
+        # 3 choices -> 2 bits, max idx = 3
+        s = GeneSchema("dir", choices=["long", "short", "both"])
+        g = Gene(s, value="long")
+        g.from_bits("11")  # idx=3, only 0-2 valid -> clamp to 2 -> "both"
+        assert g.value == "both"
+
+    def test_float_overflow_clamped_to_max(self):
+        # range(1.0, 3.0) -> 2001 steps, 11 bits, max idx = 2047
+        s = GeneSchema("pct", float, range=(1.0, 3.0))
+        g = Gene(s, value=1.0)
+        g.from_bits("11111111111")  # idx=2047, max valid=2000 -> clamp
+        assert g.value == 3.0
+
+    def test_int_within_range_unchanged(self):
+        s = GeneSchema("period", int, range=(5, 30))
+        g = Gene(s, value=5)
+        g.from_bits("01001")  # idx=9 -> value=14, valid
+        assert g.value == 14
+
+    def test_bool_no_overflow(self):
+        # 1 bit, 2 values -> no overflow possible
+        s = GeneSchema("flag", bool)
+        g = Gene(s, value=False)
+        g.from_bits("1")
+        assert g.value is True
+
+
 class TestGeneProperties:
 
     def test_name_from_schema(self):
